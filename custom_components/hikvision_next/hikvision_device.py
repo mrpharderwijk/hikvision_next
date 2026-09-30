@@ -105,14 +105,21 @@ class HikvisionDevice(ISAPIClient):
             camera_info = self.get_camera_by_id(camera_id)
             is_ip_camera = isinstance(camera_info, IPCamera)
 
-            return DeviceInfo(
+            info = DeviceInfo(
                 manufacturer=self.device_info.manufacturer,
                 identifiers={(DOMAIN, camera_info.serial_no)},
                 model=camera_info.model,
                 name=camera_info.name,
                 sw_version=camera_info.firmware if is_ip_camera else "Unknown",
-                via_device=(DOMAIN, self.device_info.serial_no) if self.device_info.is_nvr else None,
             )
+            # HA 2026.8+: `via_device` is deprecated (hard error for some entities since
+            # 2026.9, removed in 2027.8). Link NVR channels to the NVR device by its
+            # registry id instead, and never pass the key for stand-alone cameras.
+            if self.device_info.is_nvr:
+                parent = dr.async_get(self.hass).async_get_device(identifiers={(DOMAIN, self.device_info.serial_no)})
+                if parent is not None:
+                    info["via_device_id"] = parent.id
+            return info
 
     def get_device_event_capabilities(
         self,
